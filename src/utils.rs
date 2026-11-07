@@ -3,7 +3,10 @@
 use std::process::Command;
 use crate::logging::{log_d, log_e};
 use crate::properties::{get_prop_int, set_prop};
-use crate::paths::{persist_custom_devmax_prop, persist_custom_devmin_prop, max_bright_path, min_bright_path, persist_hw_min, persist_hw_max};
+use crate::paths::{
+    max_bright_fallback_path, max_bright_path, min_bright_path, persist_custom_devmax_prop,
+    persist_custom_devmin_prop, persist_hw_max, persist_hw_min,
+};
 
 // panoramic aod check
 pub(crate) fn is_panoramic_aod_enabled(dbg: bool) -> bool {
@@ -59,7 +62,10 @@ pub(crate) fn get_max_brightness(dbg: bool) -> i32 {
         return cached_max;
     }
 
-    match read_file_int(max_bright_path()) {
+    let detected = read_file_int(max_bright_path())
+        .or_else(|| read_file_int(max_bright_fallback_path()));
+
+    match detected {
         Some(val) => {
             if dbg { log_d(&format!("[DisplayAdaptor] Detected hw_max: {}. Saving to prop.", val)); }
             set_prop(persist_hw_max(), &val.to_string());
