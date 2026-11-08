@@ -137,3 +137,24 @@ fcvtzs w13, s2               // index i = floor(s2)
 ```
 
 This guarantees branchless, exact curve calculation with zero external library dependencies.
+
+### Dynamic Minimum Luminescence Floor
+
+Display drivers require a minimum conduction threshold before the backlight or emitter emits visible light. On standard 511-step AMOLED panels, hardware level 5 ($\approx 0.98\%$) represents the baseline visible floor. On 12-bit 4096-step IPS hardware backlights, writing 10 or below drops below the LED driver's conduction threshold, shutting off the backlight completely.
+
+The adaptor dynamically predicts the visible hardware floor proportionally from the baseline:
+
+$$\text{effective\_min} = \max\left(hw\_min, \text{round}\left(hw\_max \times \frac{5.0}{511.0}\right)\right)$$
+
+- **$hw\_max = 511$ (AMOLED):** $\text{effective\_min} = 5$
+- **$hw\_max = 1023$ (10-bit):** $\text{effective\_min} = 10$
+- **$hw\_max = 2047$ (11-bit):** $\text{effective\_min} = 20$
+- **$hw\_max = 4096$ (IPS Backlight):** $\text{effective\_min} = 40$
+
+This prevents the screen from going pitch black when lowering brightness to minimum on 4096-step displays, while preserving the exact calibrated low-end response on 511-step panels.
+
+Similarly, screen wake state-transition intermediate pulses are calculated dynamically:
+
+$$\text{state\_change\_level} = \max\left(2, \text{round}\left(hw\_max \times \frac{10.0}{511.0}\right)\right)$$
+
+yielding `10` on 511 and `80` on 4096.

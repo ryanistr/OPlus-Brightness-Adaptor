@@ -76,8 +76,8 @@ Verify that the service process has read and write access to `/sys/class/leds/lc
 
 The adaptor automatically reads `/sys/class/leds/lcd-backlight/max_brightness` and computes the exact gamma exponent for your hardware:
 
-- **Standard Panels (`hw_max <= 511`, 8-bit / 9-bit, typically AMOLED):** $\gamma = 1.00$ (linear passthrough). Prevents double-gamma compounding with Android framework's built-in perceptual curve so the screen does not appear dim indoors.
-- **High-Bit Backlight Panels (`hw_max = 4096`, 12-bit, typically IPS LCD):** $\gamma = 1.51$. Softens mid-range brightness expansion to prevent the 30% to 40% slider blowout.
+- **Standard Panels (`hw_max <= 511`, 8-bit / 9-bit, typically AMOLED):** $\gamma = 1.00$ (linear passthrough). Prevents double-gamma compounding with Android framework's built-in perceptual curve so the screen does not appear dim indoors. Minimum visible hardware floor is calculated as `5`.
+- **High-Bit Backlight Panels (`hw_max = 4096`, 12-bit, typically IPS LCD):** $\gamma = 1.51$. Softens mid-range brightness expansion to prevent the 30% to 40% slider blowout. Dynamically scales the minimum visible hardware floor to `40`, preventing the display from shutting off at low slider positions ($\le 10$).
 
 No property configuration or manual curve tuning is required.
 

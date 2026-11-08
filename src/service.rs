@@ -171,8 +171,8 @@ impl Inner {
     /// to can be the one it already had, and the kernel's LED core skips that
     /// write. Going through an intermediate level makes both writes a real
     /// value change, so the driver applies the target.
-    pub fn state_change_levels(target_hw: i32) -> [i32; 2] {
-        [crate::constants::STATE_CHANGE_LEVEL, target_hw]
+    pub fn state_change_levels(&self, target_hw: i32) -> [i32; 2] {
+        [crate::scaling::compute_state_change_level(self.hw_max), target_hw]
     }
 
     fn apply_brightness_inner(&self, raw: i32, force: bool) {
@@ -207,7 +207,7 @@ impl Inner {
         // it cannot express the upper half of the panel range and is only a fallback.
         if self.sysfs_fd.is_some() {
             if force {
-                let levels = Self::state_change_levels(target_hw);
+                let levels = self.state_change_levels(target_hw);
                 for (i, level) in levels.iter().enumerate() {
                     if i > 0 {
                         std::thread::sleep(std::time::Duration::from_millis(
@@ -557,22 +557,32 @@ mod tests {
 
     #[test]
     fn scaling_floor_is_five() {
-        // hw_min below the floor is raised to MIN_VISIBLE_HW, never lower.
+        // hw_min below the floor is raised to dynamic floor (5 on 511), never lower.
         assert_eq!(scale_brightness_curved(222, 1, 511, 222, 8191), 5);
         // a hw_min at or above the floor is left alone
         assert_eq!(scale_brightness_curved(222, 10, 511, 222, 8191), 10);
+        // on 4096, the floor is dynamically calculated as 40
+        assert_eq!(scale_brightness_curved(222, 1, 4096, 222, 8191), 40);
+        assert_eq!(scale_brightness_curved(222, 50, 4096, 222, 8191), 50);
     }
 
     #[test]
     fn state_change_writes_intermediate_level_first() {
         // The intermediate level goes first, then the target.
+        let range = Arc::new(RwLock::new(BrightnessRange::new(222, 8191)));
+        let (_service, inner) = PanelService::new(1, 511, range.clone(), None);
         assert_eq!(
-            Inner::state_change_levels(5),
-            [crate::constants::STATE_CHANGE_LEVEL, 5]
+            inner.state_change_levels(5),
+            [10, 5]
         );
-        assert_eq!(crate::constants::STATE_CHANGE_LEVEL, 10);
+        let (_service_4096, inner_4096) = PanelService::new(1, 4096, range, None);
+        assert_eq!(
+            inner_4096.state_change_levels(40),
+            [80, 40]
+        );
         // The intermediate is above the floor, so it is a level the panel lights at.
-        assert!(crate::constants::STATE_CHANGE_LEVEL > crate::constants::MIN_VISIBLE_HW);
+        assert!(crate::scaling::compute_state_change_level(511) > crate::scaling::compute_min_visible_hw(511));
+        assert!(crate::scaling::compute_state_change_level(4096) > crate::scaling::compute_min_visible_hw(4096));
     }
 
     #[test]

@@ -558,10 +558,11 @@ pub fn discover_backlight() -> io::Result<Backlight> {
             .filter(|v| *v > 0);
         let min = read_int(&format!("{}/min_brightness", dir)).filter(|v| *v > 0).unwrap_or(1);
         if let Some(max) = max {
+            let effective_min = crate::scaling::compute_min_visible_hw(max);
             return Ok(Backlight {
                 dir: dir.to_string(),
                 node: format!("{}/brightness", dir),
-                min,
+                min: min.max(effective_min),
                 max,
             });
         }
