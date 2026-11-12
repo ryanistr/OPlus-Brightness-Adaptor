@@ -74,22 +74,32 @@ Verify that the service process has read and write access to `/sys/class/leds/lc
 
 ## Dynamic Perceptual Curve
 
-The adaptor automatically reads `/sys/class/leds/lcd-backlight/max_brightness` and computes the exact gamma exponent for your hardware:
+The adaptor automatically reads the panel hardware bounds from sysfs — `max_hw_brightness` (falling back to `max_brightness`) and `min_brightness` — and computes the exact gamma exponent for your hardware:
 
-- **Standard Panels (`hw_max <= 511`, 8-bit / 9-bit, typically AMOLED):** $\gamma = 1.00$ (linear passthrough). Prevents double-gamma compounding with Android framework's built-in perceptual curve so the screen does not appear dim indoors. Minimum visible hardware floor is calculated as `5`.
-- **High-Bit Backlight Panels (`hw_max = 4096`, 12-bit, typically IPS LCD):** $\gamma = 1.51$. Softens mid-range brightness expansion to prevent the 30% to 40% slider blowout. Dynamically scales the minimum visible hardware floor to `40`, preventing the display from shutting off at low slider positions ($\le 10$).
+- **Standard Panels (`hw_max <= 511`, 8-bit / 9-bit, typically AMOLED):** $\gamma = 1.00$ (linear passthrough). Prevents double-gamma compounding with Android framework's built-in perceptual curve so the screen does not appear dim indoors.
+- **High-Bit Backlight Panels (`hw_max = 4096`, 12-bit, typically IPS LCD):** $\gamma = 1.51$. Softens mid-range brightness expansion to prevent the 30% to 40% slider blowout.
 
-No property configuration or manual curve tuning is required.
+The minimum hardware brightness is taken directly from the panel's `min_brightness` node (falling back to `1` when the node does not exist), with no hardcoded floor. No property configuration or manual curve tuning is required.
 
 ---
 
 ## Configuration & Debugging
 
-All obsolete multibrightness and tracing properties are dropped. Only the runtime debug logging property is retained:
+All obsolete multibrightness, tracing, and `custom.devmin`/`custom.devmax` properties are dropped. The supported properties are:
 
 | Property | Default | Values | Description |
 |---|---|---|---|
 | `persist.sys.rianixia.display-debug` | `false` | `true`, `false` | Enables verbose debug logging in Android logcat (`logcat -s DisplayAdaptor`). Disabled by default to minimize log spam. |
+| `persist.sys.rianixia.obright_min` | *(unset)* | positive integer | Overrides the hardware minimum brightness read from `/sys/class/leds/lcd-backlight/min_brightness`. Read once at service start; when set (> 0) the sysfs node is never queried, in both the AIDL service and the HWC injection payload. |
+| `persist.sys.rianixia.obright_max` | *(unset)* | positive integer | Overrides the hardware maximum brightness read from `max_hw_brightness` / `max_brightness`. Read once at service start; when set (> 0) the sysfs nodes are never queried, in both the AIDL service and the HWC injection payload. |
+
+Use the obright overrides when a panel reports a range that does not match reality (for example a kernel node lying about `min_brightness`). The service must be restarted after setting them, since they are fetched only during initialization:
+
+```bash
+adb shell setprop persist.sys.rianixia.obright_min 1
+adb shell setprop persist.sys.rianixia.obright_max 2047
+adb shell stop xia.display.adaptor && adb shell start xia.display.adaptor
+```
 
 To enable debug logs on a running device:
 
