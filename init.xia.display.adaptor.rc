@@ -1,4 +1,4 @@
-service xia.display.adaptor /vendor/bin/hw/vendor.xia.display.adaptor-V6@2.0-service
+service xia.display.adaptor /vendor/bin/hw/vendor.xia.display.adaptor-V6@3.0-service
     class hal
     user system
     group system

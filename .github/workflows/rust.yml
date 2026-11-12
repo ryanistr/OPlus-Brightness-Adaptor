@@ -65,7 +65,7 @@ jobs:
         mkdir -p release/vendor/bin/hw
         mkdir -p release/vendor/etc/init
         mkdir -p release/vendor/etc/vintf/manifest
-        cp target/aarch64-linux-android/release/xia_display_adaptor release/vendor/bin/hw/vendor.xia.display.adaptor-V6@2.0-service
+        cp target/aarch64-linux-android/release/xia_display_adaptor release/vendor/bin/hw/vendor.xia.display.adaptor-V6@3.0-service
         cp init.xia.display.adaptor.rc release/vendor/etc/init/
         cp manifest_rianixia_displaypanelfeature_aidl.xml release/vendor/etc/vintf/manifest/
         cp LICENSE release/
@@ -74,5 +74,5 @@ jobs:
     - name: Upload Release Folder as Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Xia-OPlus-Brightness-Adaptor-v6@2.0
+        name: Xia-OPlus-Brightness-Adaptor-v6@3.0
         path: release
