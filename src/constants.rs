@@ -10,20 +10,6 @@ pub(crate) const BRIGHTNESS_OFF: i32 = 0;
 pub(crate) const OS14_MAX: i32 = 5118;
 pub(crate) const OS14_MIN: i32 = 22;
 
-/// Floor for the hardware brightness the panel is driven to.
-///
-/// The panel reports `min_brightness=1`, but at that level the backlight reads
-/// as off on this device, so the lowest level the HAL writes is 5.
-pub(crate) const MIN_VISIBLE_HW: i32 = 5;
-
-/// Lowest level written while the panel is in an AOD state.
-///
-/// The panel driver ignores a non-zero backlight write while it is in its AOD
-/// mode ("for aod jump" in the driver log), but it does apply a write of 0,
-/// which blanks the AOD image it lit itself when the doze state was entered.
-/// So the AOD states are floored at 1 instead of being turned off.
-pub(crate) const AOD_MIN_HW: i32 = 1;
-
 /// Intermediate level written while the screen state changes, before the
 /// target level.
 ///

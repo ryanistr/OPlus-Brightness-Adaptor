@@ -1,4 +1,4 @@
-use crate::constants::{MIN_VISIBLE_HW, STATE_CHANGE_LEVEL};
+use crate::constants::STATE_CHANGE_LEVEL;
 
 /// Calculates perceptual gamma exponent based on panel dynamic range.
 ///
@@ -13,28 +13,15 @@ pub fn compute_dynamic_gamma(hw_max: i32) -> f32 {
     }
 }
 
-/// Dynamically calculates the minimum visible hardware brightness floor.
-///
-/// On standard 511-step AMOLED panels, hardware level 5 (~0.98%) is the visible floor.
-/// On 4096-step IPS panels, hardware level 10 or below is equivalent to completely OFF.
-/// By proportionally predicting the equivalent of baseline level 5 across different dynamic ranges:
-/// - hw_max = 511  -> 5
-/// - hw_max = 1023 -> 10
-/// - hw_max = 2047 -> 20
-/// - hw_max = 4096 -> 40
-pub fn compute_min_visible_hw(hw_max: i32) -> i32 {
-    let min = ((hw_max.max(1) as f32) * (MIN_VISIBLE_HW as f32 / 511.0)).round() as i32;
-    min.max(1)
-}
-
 /// Dynamically calculates the intermediate level written during screen state transitions.
 ///
-/// Ensures the intermediate pulse level remains visibly illuminated and above the minimum floor:
+/// Ensures the intermediate pulse level remains visibly illuminated and above
+/// the panel's own minimum:
 /// - hw_max = 511  -> 10
 /// - hw_max = 4096 -> 80
-pub fn compute_state_change_level(hw_max: i32) -> i32 {
+pub fn compute_state_change_level(hw_min: i32, hw_max: i32) -> i32 {
     let level = ((hw_max.max(1) as f32) * (STATE_CHANGE_LEVEL as f32 / 511.0)).round() as i32;
-    level.max(2)
+    level.max(hw_min)
 }
 
 pub(crate) fn scale_brightness_curved(
@@ -44,7 +31,7 @@ pub(crate) fn scale_brightness_curved(
     input_min: i32,
     input_max: i32,
 ) -> i32 {
-    let effective_min = hw_min.max(compute_min_visible_hw(hw_max));
+    let effective_min = hw_min;
     if val <= input_min { return effective_min; }
     if val >= input_max { return hw_max; }
 
@@ -63,23 +50,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_compute_min_visible_hw() {
-        assert_eq!(compute_min_visible_hw(255), 2);
-        assert_eq!(compute_min_visible_hw(511), 5);
-        assert_eq!(compute_min_visible_hw(1023), 10);
-        assert_eq!(compute_min_visible_hw(2047), 20);
-        assert_eq!(compute_min_visible_hw(4095), 40);
-        assert_eq!(compute_min_visible_hw(4096), 40);
-        assert_eq!(compute_min_visible_hw(8191), 80);
-    }
-
-    #[test]
     fn test_compute_state_change_level() {
-        assert_eq!(compute_state_change_level(255), 5);
-        assert_eq!(compute_state_change_level(511), 10);
-        assert_eq!(compute_state_change_level(1023), 20);
-        assert_eq!(compute_state_change_level(2047), 40);
-        assert_eq!(compute_state_change_level(4096), 80);
+        assert_eq!(compute_state_change_level(1, 255), 5);
+        assert_eq!(compute_state_change_level(1, 511), 10);
+        assert_eq!(compute_state_change_level(1, 1023), 20);
+        assert_eq!(compute_state_change_level(1, 2047), 40);
+        assert_eq!(compute_state_change_level(1, 4096), 80);
+        assert_eq!(compute_state_change_level(15, 511), 15);
     }
 
     #[test]
@@ -111,13 +88,13 @@ mod tests {
         // At 35% on 511 panel: gamma is 1.0 (linear), preserves ideal 511 curve
         let val_35_511 = 222 + (0.35 * (8191 - 222) as f32) as i32;
         let out_511 = scale_brightness_curved(val_35_511, 1, 511, 222, 8191);
-        // Ratio = 0.35 -> 5 + 0.35 * 506 = 182
-        assert_eq!(out_511, 182);
+        // Ratio = 0.35 -> 1 + 0.35 * 510 = 179 (f32 rounding)
+        assert_eq!(out_511, 179);
 
-        // At 35% on 4096 panel: gamma is 1.51, prevents mid-range blowout, dynamic floor = 40
+        // At 35% on 4096 panel: gamma is 1.51, prevents mid-range blowout
         let val_35_4096 = 222 + (0.35 * (8191 - 222) as f32) as i32;
         let out_4096 = scale_brightness_curved(val_35_4096, 1, 4096, 222, 8191);
-        // Ratio = 0.35^1.51 ~ 0.2049 -> 40 + 0.2049 * (4096 - 40) = 40 + 831 = 871
-        assert_eq!(out_4096, 871);
+        // Ratio = 0.35^1.51 ~ 0.2049 -> 1 + 0.2049 * 4095 = 840
+        assert_eq!(out_4096, 840);
     }
 }

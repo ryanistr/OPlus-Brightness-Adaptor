@@ -543,7 +543,14 @@ fn read_int(path: &str) -> Option<i32> {
 }
 
 /// Discover the backlight node and the panel's brightness bounds.
+///
+/// `persist.sys.rianixia.obright_min` / `.obright_max` override the nodes
+/// when set, so the sysfs reads are skipped entirely on that path.
 pub fn discover_backlight() -> io::Result<Backlight> {
+    let prop_min = crate::properties::get_prop_int(crate::paths::persist_obright_min())
+        .filter(|v| *v > 0);
+    let prop_max = crate::properties::get_prop_int(crate::paths::persist_obright_max())
+        .filter(|v| *v > 0);
     let dirs = [
         "/sys/class/leds/lcd-backlight",
         "/sys/class/backlight/panel0-backlight",
@@ -552,17 +559,17 @@ pub fn discover_backlight() -> io::Result<Backlight> {
         if !std::path::Path::new(dir).is_dir() {
             continue;
         }
-        let max = read_int(&format!("{}/max_hw_brightness", dir))
-            .filter(|v| *v > 0)
-            .or_else(|| read_int(&format!("{}/max_brightness", dir)))
-            .filter(|v| *v > 0);
-        let min = read_int(&format!("{}/min_brightness", dir)).filter(|v| *v > 0).unwrap_or(1);
+        let max = prop_max
+            .or_else(|| read_int(&format!("{}/max_hw_brightness", dir)).filter(|v| *v > 0))
+            .or_else(|| read_int(&format!("{}/max_brightness", dir)).filter(|v| *v > 0));
+        let min = prop_min
+            .or_else(|| read_int(&format!("{}/min_brightness", dir)).filter(|v| *v > 0))
+            .unwrap_or(1);
         if let Some(max) = max {
-            let effective_min = crate::scaling::compute_min_visible_hw(max);
             return Ok(Backlight {
                 dir: dir.to_string(),
                 node: format!("{}/brightness", dir),
-                min: min.max(effective_min),
+                min,
                 max,
             });
         }

@@ -4,8 +4,8 @@ use std::process::Command;
 use crate::logging::{log_d, log_e};
 use crate::properties::{get_prop_int, set_prop};
 use crate::paths::{
-    max_bright_fallback_path, max_bright_path, min_bright_path, persist_custom_devmax_prop,
-    persist_custom_devmin_prop, persist_hw_max, persist_hw_min,
+    max_bright_fallback_path, max_bright_path, min_bright_path, persist_hw_max, persist_hw_min,
+    persist_obright_max, persist_obright_min,
 };
 
 // panoramic aod check
@@ -50,13 +50,14 @@ pub(crate) fn read_file_int(path: &str) -> Option<i32> {
 
 // hardware brightness getter
 pub(crate) fn get_max_brightness(dbg: bool) -> i32 {
-    if let Some(custom_max) = get_prop_int(persist_custom_devmax_prop()) {
-        if custom_max > 0 {
-            if dbg { log_d(&format!("[DisplayAdaptor] Using custom devmax brightness: {}", custom_max)); }
-            return custom_max;
+    // Static override wins over everything; read once at init.
+    if let Some(override_max) = get_prop_int(persist_obright_max()) {
+        if override_max > 0 {
+            if dbg { log_d(&format!("[DisplayAdaptor] Using obright_max override: {}", override_max)); }
+            return override_max;
         }
     }
-    
+
     if let Some(cached_max) = get_prop_int(persist_hw_max()) {
         if dbg { log_d(&format!("[DisplayAdaptor] Using cached hw_max: {}", cached_max)); }
         return cached_max;
@@ -79,11 +80,11 @@ pub(crate) fn get_max_brightness(dbg: bool) -> i32 {
 }
 
 pub(crate) fn get_min_brightness(dbg: bool) -> i32 {
-    // Check for custom devmin override first
-    if let Some(custom_min) = get_prop_int(persist_custom_devmin_prop()) {
-        if custom_min > 0 {
-            if dbg { log_d(&format!("[DisplayAdaptor] Using custom devmin brightness for calculation: {}", custom_min)); }
-            return custom_min;
+    // Static override wins over everything; read once at init.
+    if let Some(override_min) = get_prop_int(persist_obright_min()) {
+        if override_min > 0 {
+            if dbg { log_d(&format!("[DisplayAdaptor] Using obright_min override: {}", override_min)); }
+            return override_min;
         }
     }
 

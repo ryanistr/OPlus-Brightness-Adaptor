@@ -67,15 +67,13 @@ impl Inner {
 
     /// The level to write when the panel is being turned off.
     ///
-    /// The panel driver applies a zero write even while the panel is in its
-    /// AOD mode, and that blanks the AOD image the driver lit itself when the
-    /// doze state was entered. A non-zero write is dropped by the driver in
-    /// that mode instead, so the AOD-capable states are floored at 1.
+    /// The AOD-capable states are floored at the panel's own minimum level
+    /// (`hw_min`, falling back to 1) instead of being turned off.
     fn off_level(&self) -> i32 {
         match self.screen_state.load(Ordering::SeqCst) {
             crate::constants::SCREEN_STATE_OFF_AOD
             | crate::constants::SCREEN_STATE_DOZE
-            | crate::constants::SCREEN_STATE_DOZE_SUSPEND => crate::constants::AOD_MIN_HW,
+            | crate::constants::SCREEN_STATE_DOZE_SUSPEND => self.hw_min,
             _ => BRIGHTNESS_OFF,
         }
     }
@@ -122,7 +120,7 @@ impl Inner {
             // AOD keeps the panel lit; the framework drives the doze level.
             // Never write 0 here: the driver applies a zero write even in AOD
             // mode and that blanks the AOD image.
-            self.write_sysfs(crate::constants::AOD_MIN_HW, dbg);
+            self.write_sysfs(self.hw_min, dbg);
             return;
         }
 
@@ -172,7 +170,7 @@ impl Inner {
     /// write. Going through an intermediate level makes both writes a real
     /// value change, so the driver applies the target.
     pub fn state_change_levels(&self, target_hw: i32) -> [i32; 2] {
-        [crate::scaling::compute_state_change_level(self.hw_max), target_hw]
+        [crate::scaling::compute_state_change_level(self.hw_min, self.hw_max), target_hw]
     }
 
     fn apply_brightness_inner(&self, raw: i32, force: bool) {
@@ -549,20 +547,17 @@ mod tests {
 
     #[test]
     fn test_scaling_math() {
-        assert_eq!(scale_brightness_curved(222, 1, 511, 222, 8191), 5);
+        assert_eq!(scale_brightness_curved(222, 1, 511, 222, 8191), 1);
         assert_eq!(scale_brightness_curved(8191, 1, 511, 222, 8191), 511);
         let mid = scale_brightness_curved(4000, 1, 511, 222, 8191);
         assert!(mid > 200 && mid < 260);
     }
 
     #[test]
-    fn scaling_floor_is_five() {
-        // hw_min below the floor is raised to dynamic floor (5 on 511), never lower.
-        assert_eq!(scale_brightness_curved(222, 1, 511, 222, 8191), 5);
-        // a hw_min at or above the floor is left alone
+    fn scaling_floor_follows_hw_min() {
+        // hw_min is the panel's own floor, used as-is
+        assert_eq!(scale_brightness_curved(222, 1, 511, 222, 8191), 1);
         assert_eq!(scale_brightness_curved(222, 10, 511, 222, 8191), 10);
-        // on 4096, the floor is dynamically calculated as 40
-        assert_eq!(scale_brightness_curved(222, 1, 4096, 222, 8191), 40);
         assert_eq!(scale_brightness_curved(222, 50, 4096, 222, 8191), 50);
     }
 
@@ -581,8 +576,10 @@ mod tests {
             [80, 40]
         );
         // The intermediate is above the floor, so it is a level the panel lights at.
-        assert!(crate::scaling::compute_state_change_level(511) > crate::scaling::compute_min_visible_hw(511));
-        assert!(crate::scaling::compute_state_change_level(4096) > crate::scaling::compute_min_visible_hw(4096));
+        assert!(crate::scaling::compute_state_change_level(1, 511) > 1);
+        assert!(crate::scaling::compute_state_change_level(1, 4096) > 1);
+        // The intermediate never dips below the panel's own minimum.
+        assert_eq!(crate::scaling::compute_state_change_level(15, 511), 15);
     }
 
     #[test]
