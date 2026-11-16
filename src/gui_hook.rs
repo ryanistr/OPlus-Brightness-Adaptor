@@ -2,7 +2,7 @@ use std::io;
 
 use crate::elf::{Elf, Symbol};
 use crate::gui_payload::{
-    ABI_MODE, COUNTA, COUNTB, DPTR, FLOATS, LUT, LUT_LEN, PATHBUF, PAYLOAD, STATE, STATE_LEN,
+    ABI_MODE, COUNTA, COUNTB, DPTR, FLOATS, LUT, PATHBUF, PAYLOAD, STATE, STATE_LEN,
     STRUCT_OFFSET, STUB_SET, STUB_SUPPORT, SUPPORT_ABI, WRESULT,
 };
 use crate::hwc_hook::{
@@ -12,7 +12,7 @@ use crate::hwc_hook::{
     NR_OPENAT, O_RDONLY_CLOEXEC, O_WRONLY_CLOEXEC, PAGE_SIZE, PROT_RW, PROT_RX,
 };
 use crate::logging::log_d;
-use crate::scaling::compute_dynamic_gamma;
+use crate::scaling::build_brightness_lut;
 
 extern "C" {
     fn ptrace(
@@ -378,13 +378,7 @@ fn inject(
             floats[4..8].copy_from_slice(&255.0f32.to_le_bytes());
             let _ = poke_bytes(tid, state_page + FLOATS as u64, &floats);
 
-            let gamma = compute_dynamic_gamma(backlight.max);
-            let mut lut = [0u8; LUT_LEN];
-            for i in 0..256 {
-                let ratio = i as f32 / 255.0;
-                let curved = ratio.powf(gamma);
-                lut[i * 4..(i + 1) * 4].copy_from_slice(&curved.to_le_bytes());
-            }
+            let lut = build_brightness_lut(backlight.max);
             let _ = poke_bytes(tid, state_page + LUT as u64, &lut);
         }
 
@@ -464,13 +458,7 @@ fn inject(
     floats[4..8].copy_from_slice(&255.0f32.to_le_bytes());
     let _ = poke_bytes(tid, state_page + FLOATS as u64, &floats);
 
-    let gamma = compute_dynamic_gamma(backlight.max);
-    let mut lut = [0u8; LUT_LEN];
-    for i in 0..256 {
-        let ratio = i as f32 / 255.0;
-        let curved = ratio.powf(gamma);
-        lut[i * 4..(i + 1) * 4].copy_from_slice(&curved.to_le_bytes());
-    }
+    let lut = build_brightness_lut(backlight.max);
     if !poke_bytes(tid, state_page + LUT as u64, &lut) {
         return Err(io::Error::new(io::ErrorKind::Other, "lut write failed"));
     }

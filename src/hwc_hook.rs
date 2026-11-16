@@ -29,10 +29,10 @@ use std::os::raw::{c_int, c_long, c_void};
 
 use crate::elf::Elf;
 use crate::hwc_payload::{
-    DPTR, FLOATS, LUT, LUT_LEN, PATHBUF, PAYLOAD, STATE, STATE_LEN, STUB_SET, STUB_SUPPORT,
+    DPTR, FLOATS, LUT, PATHBUF, PAYLOAD, STATE, STATE_LEN, STUB_SET, STUB_SUPPORT,
 };
 use crate::logging::{log_d, log_e};
-use crate::scaling::compute_dynamic_gamma;
+use crate::scaling::build_brightness_lut;
 
 extern "C" {
     fn ptrace(request: c_int, pid: c_int, addr: *mut c_void, data: *mut c_void) -> c_long;
@@ -772,13 +772,7 @@ fn inject(
             floats[4..8].copy_from_slice(&255.0f32.to_le_bytes());
             let _ = poke_bytes(tid, state_page + FLOATS as u64, &floats);
 
-            let gamma = compute_dynamic_gamma(backlight.max);
-            let mut lut = [0u8; LUT_LEN];
-            for i in 0..256 {
-                let ratio = i as f32 / 255.0;
-                let curved = ratio.powf(gamma);
-                lut[i * 4..(i + 1) * 4].copy_from_slice(&curved.to_le_bytes());
-            }
+            let lut = build_brightness_lut(backlight.max);
             let _ = poke_bytes(tid, state_page + LUT as u64, &lut);
         }
 
@@ -857,13 +851,7 @@ fn inject(
     floats[4..8].copy_from_slice(&255.0f32.to_le_bytes());
     let _ = poke_bytes(tid, state_page + FLOATS as u64, &floats);
 
-    let gamma = compute_dynamic_gamma(backlight.max);
-    let mut lut = [0u8; LUT_LEN];
-    for i in 0..256 {
-        let ratio = i as f32 / 255.0;
-        let curved = ratio.powf(gamma);
-        lut[i * 4..(i + 1) * 4].copy_from_slice(&curved.to_le_bytes());
-    }
+    let lut = build_brightness_lut(backlight.max);
     if !poke_bytes(tid, state_page + LUT as u64, &lut) {
         return Err(io::Error::new(io::ErrorKind::Other, "lut write failed"));
     }
@@ -937,7 +925,7 @@ pub fn describe() -> Option<Composer> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hwc_payload::WRESULT;
+    use crate::hwc_payload::{LUT_LEN, WRESULT};
 
     fn word(off: usize) -> u32 {
         u32::from_le_bytes([

@@ -1,5 +1,21 @@
 use crate::constants::STATE_CHANGE_LEVEL;
 
+/// OOS `DisplayDeviceExt` sends ~0.499878 at manual slider max (8191), reserving
+/// 0.50..1.00 for HBM (10239). Using 127/255 (~0.4980) ensures `lut[127]` reaches
+/// 1.0 so `fcvtzs` in the hook payload outputs the exact `hw_max` at manual max.
+pub const NORMAL_MAX_FLOAT: f32 = 127.0 / 255.0;
+
+pub fn build_brightness_lut(hw_max: i32) -> [u8; 256 * 4] {
+    let gamma = compute_dynamic_gamma(hw_max);
+    let mut lut = [0u8; 256 * 4];
+    for i in 0..256 {
+        let ratio = ((i as f32 / 255.0) / NORMAL_MAX_FLOAT).min(1.0);
+        let curved = ratio.powf(gamma);
+        lut[i * 4..(i + 1) * 4].copy_from_slice(&curved.to_le_bytes());
+    }
+    lut
+}
+
 /// Calculates perceptual gamma exponent based on panel dynamic range.
 ///
 /// Disables secondary compounding (gamma 1.0) on standard 511-step panels (typically AMOLED).
@@ -96,5 +112,17 @@ mod tests {
         let out_4096 = scale_brightness_curved(val_35_4096, 1, 4096, 222, 8191);
         // Ratio = 0.35^1.51 ~ 0.2049 -> 1 + 0.2049 * 4095 = 840
         assert_eq!(out_4096, 840);
+    }
+
+    #[test]
+    fn test_build_brightness_lut_manual_max_reaches_one() {
+        let lut = build_brightness_lut(511);
+        let read_f32 = |idx: usize| -> f32 {
+            f32::from_le_bytes(lut[idx * 4..(idx + 1) * 4].try_into().unwrap())
+        };
+        assert_eq!(read_f32(0), 0.0);
+        assert_eq!(read_f32(127), 1.0);
+        assert_eq!(read_f32(128), 1.0);
+        assert_eq!(read_f32(255), 1.0);
     }
 }
